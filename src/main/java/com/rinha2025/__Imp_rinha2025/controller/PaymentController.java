@@ -1,10 +1,7 @@
 package com.rinha2025.__Imp_rinha2025.controller;
 
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentResponseDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,8 +18,7 @@ public class PaymentController {
     }
 
     @PostMapping
-    public ResponseEntity<PaymentResponseDTO> processPayment(@RequestBody PaymentRequestDTO requestPaymentDTO) {
-        PaymentResponseDTO paymentResponseDTO = this.paymentService.processPayment(requestPaymentDTO);
-        return ResponseEntity.ok(paymentResponseDTO);
+    public void processPayment(@RequestBody PaymentRequestDTO requestPaymentDTO) {
+        this.paymentService.processPayment(requestPaymentDTO);
     }
 }

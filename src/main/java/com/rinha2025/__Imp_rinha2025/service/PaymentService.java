@@ -2,14 +2,13 @@ package com.rinha2025.__Imp_rinha2025.service;
 
 
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentResponseDTO;
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryDTO;
+import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
 
 import java.time.LocalDateTime;
 
 public interface PaymentService {
 
-    PaymentResponseDTO processPayment(PaymentRequestDTO paymentRequestDTO);
+    void processPayment(PaymentRequestDTO paymentRequestDTO);
 
-    PaymentSummaryDTO getPaymentSummary(LocalDateTime from, LocalDateTime to);
+    PaymentSummaryResponseDTO getPaymentSummary(LocalDateTime from, LocalDateTime to);
 }
