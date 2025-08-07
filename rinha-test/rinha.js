@@ -1,4 +1,4 @@
-import { textSummary } from "https://jslib.k6.io/k6-summary/0.1.0/index.js";
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 import { sleep } from "k6";
 import exec from "k6/execution";
@@ -14,9 +14,6 @@ import {
   getBackendPaymentsSummary,
   requestBackendPayment
 } from "./requests.js";
-
-// https://mikemcl.github.io/big.js/
-import Big from "https://cdn.jsdelivr.net/npm/big.js@7.0.1/big.min.js";
 
 const MAX_REQUESTS = __ENV.MAX_REQUESTS ?? 500;
 
@@ -40,7 +37,7 @@ export const options = {
       stages: [{ target: MAX_REQUESTS, duration: "60s" }],
     },
     payments_consistency: {
-      exec: "checkPaymentsConsistency",
+      exec: "checkPayments",
       executor: "constant-vus",
       //startTime: "5s",
       duration: "60s",
@@ -148,8 +145,6 @@ export async function setup() {
   await resetBackendDatabase();
 }
 
-const paymentRequestFixedAmount = new Big(19.90);
-
 export async function teardown() {
 
   const to = new Date();
@@ -161,28 +156,29 @@ export async function teardown() {
   const fallbackResponse = await getPPPaymentsSummary("fallback", from.toISOString(), to.toISOString());
   const backendPaymentsSummary = await getBackendPaymentsSummary(from.toISOString(), to.toISOString());
 
-  const totalTransactionsAmount = new Big(backendPaymentsSummary.default.totalAmount)
-    .plus(backendPaymentsSummary.fallback.totalAmount);
-
-  totalTransactionsAmountCounter.add(totalTransactionsAmount.toNumber());
+  totalTransactionsAmountCounter.add(
+    backendPaymentsSummary.default.totalAmount +
+    backendPaymentsSummary.fallback.totalAmount);
 
   defaultTotalAmountCounter.add(backendPaymentsSummary.default.totalAmount);
   defaultTotalRequestsCounter.add(backendPaymentsSummary.default.totalRequests);
   fallbackTotalAmountCounter.add(backendPaymentsSummary.fallback.totalAmount);
   fallbackTotalRequestsCounter.add(backendPaymentsSummary.fallback.totalRequests);
 
-  const defaultTotalFee =  new Big(defaultResponse.feePerTransaction).times(backendPaymentsSummary.default.totalAmount);
-  const fallbackTotalFee = new Big(fallbackResponse.feePerTransaction).times(backendPaymentsSummary.fallback.totalAmount);
+  const defaultTotalFee = defaultResponse.feePerTransaction * backendPaymentsSummary.default.totalAmount;
+  const fallbackTotalFee = fallbackResponse.feePerTransaction * backendPaymentsSummary.fallback.totalAmount;
 
-  defaultTotalFeeCounter.add(defaultTotalFee.toNumber());
-  fallbackTotalFeeCounter.add(fallbackTotalFee.toNumber());
+  defaultTotalFeeCounter.add(defaultTotalFee);
+  fallbackTotalFeeCounter.add(fallbackTotalFee);
 }
+
+const paymentRequestFixedAmount = 19.90;
 
 export async function payments() {
 
   const payload = {
     correlationId: uuidv4(),
-    amount: paymentRequestFixedAmount.toNumber()
+    amount: paymentRequestFixedAmount
   };
 
   const response = await requestBackendPayment(payload);
@@ -198,70 +194,58 @@ export async function payments() {
   sleep(1);
 }
 
-export async function checkPaymentsConsistency() {
-
+export async function checkPayments() {
   const now = new Date();
 
-  const from = new Date(now - 1000 * 10).toISOString();
-  const to = new Date(now - 100).toISOString();
+  const from = new Date(now.getTime() - 1000 * 10).toISOString();
+  const to = new Date(now.getTime() - 100).toISOString();
 
   const defaultAdminPaymentsSummaryPromise = getPPPaymentsSummary(
-    "default",
-    from,
-    to,
+      "default",
+      from,
+      to,
   );
   const fallbackAdminPaymentsSummaryPromise = getPPPaymentsSummary(
-    "fallback",
-    from,
-    to,
+      "fallback",
+      from,
+      to,
   );
   const backendPaymentsSummaryPromise = getBackendPaymentsSummary(from, to);
 
-  const [defaultAdminPaymentsSummary, fallbackAdminPaymentsSummary, backendPaymentsSummary] = await Promise.all([
+  const [
+    defaultAdminPaymentsSummary,
+    fallbackAdminPaymentsSummary,
+    backendPaymentsSummary
+  ] = await Promise.all([
     defaultAdminPaymentsSummaryPromise,
     fallbackAdminPaymentsSummaryPromise,
     backendPaymentsSummaryPromise
   ]);
 
-  const inconsistencies =
-    new Big(backendPaymentsSummary.default.totalAmount)
-      .minus(defaultAdminPaymentsSummary.totalAmount)
-      .abs()
-      .plus(
-        new Big(backendPaymentsSummary.fallback.totalAmount)
-        .minus(fallbackAdminPaymentsSummary.totalAmount)
-        .abs()
-      );
+  const defaultAdminTotal = defaultAdminPaymentsSummary.totalAmount ?? 0;
+  const fallbackAdminTotal = fallbackAdminPaymentsSummary.totalAmount ?? 0;
+  const backendDefaultTotal = backendPaymentsSummary.default.totalAmount ?? 0;
+  const backendFallbackTotal = backendPaymentsSummary.fallback.totalAmount ?? 0;
 
-  balanceInconsistencyCounter.add(inconsistencies.toNumber());
+  const defaultDiff = Math.abs(backendDefaultTotal - defaultAdminTotal);
+  const fallbackDiff = Math.abs(backendFallbackTotal - fallbackAdminTotal);
 
-  if (inconsistencies > 0) {
-    console.warn(
-      `Found ${inconsistencies} inconsistencies in payment processing`
-    );
+  const inconsistencies = defaultDiff + fallbackDiff;
 
-    console.info(`
-    ╔══════════════════ Inconsistency Report ══════════════════╗
-    ║ Detected Inconsistencies: ${inconsistencies}
-    ║
-    ║ Backend:
-    ║   Default Amount.....${backendPaymentsSummary.default.totalAmount}
-    ║   Default Requests...${backendPaymentsSummary.default.totalRequests}
-    ║   Fallback Amount....${backendPaymentsSummary.fallback.totalAmount}
-    ║   Fallback Requests..${backendPaymentsSummary.fallback.totalRequests}
-    ║
-    ║ Payment Processor:
-    ║   Default Amount.....${defaultAdminPaymentsSummary.totalAmount}
-    ║   Default Requests...${defaultAdminPaymentsSummary.totalRequests}
-    ║   Fallback Amount....${fallbackAdminPaymentsSummary.totalAmount}
-    ║   Fallback Requests..${fallbackAdminPaymentsSummary.totalRequests}
-    ║
-    ║ Time Range:
-    ║   From..${from}
-    ║   To....${to}
-    ║   Now...${now.toISOString()}
-    ╚═══════════════════════════════════════════════════════════`);
-  }
+  // Log formatado
+  console.log("🧾 [Payment Check]");
+  console.log(`FROM: ${from}`);
+  console.log(`TO  : ${to}`);
+  console.log(`Backend Default : ${backendDefaultTotal.toFixed(2)}`);
+  console.log(`Admin Default   : ${defaultAdminTotal.toFixed(2)}`);
+  console.log(`→ Diff Default  : ${defaultDiff.toFixed(2)}`);
+  console.log(`Backend Fallback: ${backendFallbackTotal.toFixed(2)}`);
+  console.log(`Admin Fallback  : ${fallbackAdminTotal.toFixed(2)}`);
+  console.log(`→ Diff Fallback : ${fallbackDiff.toFixed(2)}`);
+  console.log(`🔁 Total Inconsistency: ${inconsistencies.toFixed(2)}`);
+  console.log("--------------------------------------------------");
+
+  balanceInconsistencyCounter.add(inconsistencies);
 
   sleep(10);
 }
@@ -288,24 +272,19 @@ export function handleSummary(data) {
 
   const default_total_fee = data.metrics.default_total_fee.values.count;
   const fallback_total_fee = data.metrics.fallback_total_fee.values.count;
-  const total_fee = new Big(default_total_fee).plus(fallback_total_fee).toNumber();
+  const total_fee = default_total_fee + fallback_total_fee;
 
-  const p_99 = new Big(data.metrics["http_req_duration{expected_response:true}"].values["p(99)"]).round(2).toNumber();
-  const p_99_bonus = Math.max(new Big((11 - p_99) * 0.02).round(2).toNumber(), 0);
+  const p_99 = data.metrics["http_req_duration{expected_response:true}"].values["p(99)"];
+  const p_99_bonus = Math.max((11 - p_99) * 0.02, 0);
   const contains_inconsistencies = data.metrics.balance_inconsistency_amount.values.count != 0;
-  
   const inconsistencies_fine = contains_inconsistencies ? 0.35 : 0;
 
-  // caixa dois
-  const lag = data.metrics.transactions_success.values.count - (data.metrics.default_total_requests.values.count + data.metrics.fallback_total_requests.values.count);
-  const slush_fund = lag < 0;
+  const liquid_partial_amount = (actual_total_amount - total_fee);
 
-  const liquid_partial_amount = new Big(actual_total_amount).minus(total_fee).toNumber();
+  const liquid_amount = liquid_partial_amount
+    + (liquid_partial_amount * p_99_bonus)
+    - (liquid_partial_amount * inconsistencies_fine);
 
-  const liquid_amount = new Big(liquid_partial_amount)
-    .plus(new Big(liquid_partial_amount).times(p_99_bonus))
-    .minus(new Big(liquid_partial_amount).times(inconsistencies_fine)).toNumber();
-  
   const name = __ENV.PARTICIPANT ?? "anonymous";
 
   const custom_data = {
@@ -328,15 +307,11 @@ export function handleSummary(data) {
         descricao: "Se 'total_inconsistencias' > 0, há multa de 35%.",
       }
     },
-    caixa_dois: {
-      detectado: slush_fund,
-      descricao: "Se 'lag' for negativo, significa que seu backend registrou mais pagamentos do que solicitado, automaticamente desclassificando sua submissão!",
-    },
     lag: {
       num_pagamentos_total: data.metrics.default_total_requests.values.count + data.metrics.fallback_total_requests.values.count,
       num_pagamentos_solicitados: data.metrics.transactions_success.values.count,
       lag: data.metrics.transactions_success.values.count - (data.metrics.default_total_requests.values.count + data.metrics.fallback_total_requests.values.count),
-      descricao: "Lag é a diferença entre a quantidade de solicitações de pagamentos e o que foi realmente computado pelo backend. Mostra a perda de pagamentos possivelmente por estarem enfileirados."
+      descricao: "Lag é a diferença entre a quantidade de solicitações de pagamentos vs o que foi realmente computado pelo backend. Mostra a perda de pagamentos possivelmente por estarem enfileirados."
     },
     pagamentos_solicitados: {
       qtd_sucesso: data.metrics.transactions_success.values.count,

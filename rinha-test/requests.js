@@ -121,14 +121,28 @@ export async function resetBackendDatabase() {
 }
 
 export async function getBackendPaymentsSummary(from, to) {
+    const url = `/payments-summary?from=${from}&to=${to}`;
 
-    const response = await backendHttp.asyncGet(`/payments-summary?from=${from}&to=${to}`);
+    try {
+        const response = await backendHttp.asyncGet(url);
 
-    if (response.status == 200) {
-        return JSON.parse(response.body);
+        if (response.status === 200) {
+            return JSON.parse(response.body);
+        }
+
+        let errorMessage = "Resposta sem mensagem de erro.";
+
+        try {
+            const parsed = JSON.parse(response.body);
+            errorMessage = parsed.message || JSON.stringify(parsed);
+        } catch {
+            errorMessage = response.body || errorMessage;
+        }
+
+        console.error(`❌ Erro ao acessar '${url}' (HTTP ${response.status}): ${errorMessage}`);
+    } catch (err) {
+        console.error(`❌ Falha na requisição para '${url}':`, err);
     }
-
-    console.error(`Não foi possível obter resposta de '/payments-summary?from=${from}&to=${to}' para o backend (HTTP ${response.status})`);
 
     return {
         default: {
@@ -139,7 +153,7 @@ export async function getBackendPaymentsSummary(from, to) {
             totalAmount: 0,
             totalRequests: 0
         }
-    }
+    };
 }
 
 export async function requestBackendPayment(payload) {
