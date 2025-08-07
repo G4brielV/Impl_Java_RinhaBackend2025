@@ -72,9 +72,9 @@ Resposta:
 ⚠️ É necessário ter o Docker instalado na máquina
   
 1. Subir o ambiente da Rinha
-  ```bash 
-  docker compose -f docker-compose-rinha.yaml up -d
-  ```
+   ```bash
+   docker compose -f docker-compose-rinha.yaml up -d
+   ```
 2. Subir o projeto (APIs, banco, nginx)
    ```bash
    docker compose up --build -d
