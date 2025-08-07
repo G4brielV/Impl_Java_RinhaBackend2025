@@ -5,3 +5,5 @@ CREATE TABLE payments (
     created_at TIMESTAMP NOT NULL,
     is_default BOOLEAN DEFAULT TRUE
 );
+
+CREATE INDEX idx_payments_created_at ON payments(created_at);
