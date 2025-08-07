@@ -1,7 +1,7 @@
 package com.rinha2025.__Imp_rinha2025.model.projection;
 
 public interface PaymentSummaryProjection {
-    Boolean isDefault();
+    Boolean getIsDefault();
     long getTotalRequests();
     double getTotalAmount();
 }

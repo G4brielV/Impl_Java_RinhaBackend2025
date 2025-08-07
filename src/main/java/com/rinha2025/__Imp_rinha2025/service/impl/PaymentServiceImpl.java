@@ -36,8 +36,23 @@ public class PaymentServiceImpl implements PaymentService {
         enqueuePayment(paymentEntity);
     }
 
-    private void enqueuePayment(PaymentEntity requestEntity) {
+    @Override
+    public void enqueuePayment(PaymentEntity requestEntity) {
         queue.offer(requestEntity);
+    }
+
+    @Override
+    public PaymentEntity dequeuePayment() {
+        try {
+            return queue.take();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void save(PaymentEntity paymentEntity) {
+        paymentRepository.save(paymentEntity);
     }
 
     @Override
@@ -48,7 +63,7 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentResultsDTO fallbackResults = new PaymentResultsDTO(0, 0.0);
 
         for (PaymentSummaryProjection summary : summaryList) {
-            if (Boolean.TRUE.equals(summary.isDefault())) {
+            if (Boolean.TRUE.equals(summary.getIsDefault())) {
                 defaultResults = new PaymentResultsDTO(summary.getTotalRequests(), summary.getTotalAmount());
             } else {
                 fallbackResults = new PaymentResultsDTO(summary.getTotalRequests(), summary.getTotalAmount());

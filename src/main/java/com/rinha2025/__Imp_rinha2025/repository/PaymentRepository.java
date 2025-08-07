@@ -20,7 +20,7 @@ public interface PaymentRepository extends JpaRepository<PaymentEntity, Long> {
                     COALESCE(SUM(p.amount), 0) AS totalAmount
                 FROM payments p
                 WHERE
-                    p.createdAt BETWEEN :from AND :to
+                    p.created_at BETWEEN :from AND :to
                 GROUP BY p.is_default
             """, nativeQuery = true)
     List<PaymentSummaryProjection> findSummaryByDateRange(

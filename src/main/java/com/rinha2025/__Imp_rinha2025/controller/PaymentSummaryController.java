@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @RestController
 @RequestMapping("/payments-summary")
@@ -22,9 +23,12 @@ public class PaymentSummaryController {
 
     @GetMapping
     public PaymentSummaryResponseDTO getPaymentSummary(
-            @RequestParam(value = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime from,
-            @RequestParam(value = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDateTime to)
+            @RequestParam(value = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(value = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime  to)
     {
-        return this.paymentService.getPaymentSummary(from, to);
+        return this.paymentService.getPaymentSummary(
+                from != null ? from.toLocalDateTime() : null,
+                to != null ? to.toLocalDateTime() : null
+        );
     }
 }
