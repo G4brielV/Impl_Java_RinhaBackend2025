@@ -67,4 +67,26 @@ Resposta:
 | api1     | 0.5 | 150MB   |
 | api2     | 0.5 | 150MB   |
 | postgres | 0.4 | 40MB    |
+
+## ▶️ Como Executar
+⚠️ É necessário ter o Docker instalado na máquina
   
+1. Subir o ambiente da Rinha
+  ```bash 
+  docker compose -f docker-compose-rinha.yaml up -d
+  ```
+2. Subir o projeto (APIs, banco, nginx)
+   ```bash
+   docker compose up --build -d
+   ```
+## 🧪 Testes de Carga
+```bash
+cd rinha-test
+k6 run rinha.js
+```
+
+## 📁 Organização
+- src/: Código-fonte da aplicação Java
+- docker-compose.yml: Compose principal do projeto
+- docker-compose-rinha.yaml: Compose fornecido pela organização da Rinha
+- rinha-test/: Scripts de teste de carga com K6
