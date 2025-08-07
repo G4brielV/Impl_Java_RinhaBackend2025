@@ -1,4 +1,4 @@
-# 🥩 Rinha de Backend 2025 - Java (Spring Boot)
+# 🐓 Rinha de Backend 2025 - Java (Spring Boot)
 
 Este projeto foi desenvolvido para participar da [Rinha de Backend 2025](https://github.com/zanfranceschi/rinha-de-backend-2025), utilizando Java 21 com Spring Boot.
 
