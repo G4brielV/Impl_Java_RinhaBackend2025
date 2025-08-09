@@ -18,6 +18,7 @@ services:
         limits:
           cpus: "0.1"
           memory: "10MB"
+    command: ["nginx", "-g", "daemon off;"]
 
   api1:
     image: g4brielv/rinha-backend-2025:standard
