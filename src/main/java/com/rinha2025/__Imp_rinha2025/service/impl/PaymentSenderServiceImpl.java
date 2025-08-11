@@ -3,6 +3,8 @@ package com.rinha2025.__Imp_rinha2025.service.impl;
 
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentProcessorRequestDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -14,7 +16,7 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class PaymentSenderServiceImpl implements PaymentSenderService {
 
-
+    private static final Logger logger = LoggerFactory.getLogger(PaymentSenderServiceImpl.class);
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
@@ -29,6 +31,7 @@ public class PaymentSenderServiceImpl implements PaymentSenderService {
 
             return response.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
+            logger.error("Erro ao enviar pagamento para a URL: {}", URL, e);
             return false;
         }
     }
