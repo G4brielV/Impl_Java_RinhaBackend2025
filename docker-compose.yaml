@@ -14,8 +14,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
-          memory: "10MB"
+          cpus: "0.2"
+          memory: "20MB"
     command: ["nginx", "-g", "daemon off;"]
 
   api1:
@@ -41,7 +41,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: "150MB"
+          memory: "105MB"
 
   api2:
     #image: g4brielv/rinha-backend-2025:standard
@@ -66,7 +66,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: "150MB"
+          memory: "105MB"
 
   postgresql-rinha:
     image: postgres:16
@@ -88,8 +88,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "40MB"
+          cpus: "0.3"
+          memory: "120MB"
 
 volumes:
   pgdata:
