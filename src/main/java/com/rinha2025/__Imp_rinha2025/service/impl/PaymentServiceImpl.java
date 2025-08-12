@@ -43,17 +43,24 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentEntity dequeuePayment() {
+        // poll() retorna null imediatamente se a fila estiver vazia,
+        // ao invés de esperar como o take().
+        return queue.poll();
+
+        /*
         try {
             return queue.take();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+         */
     }
 
     @Override
     public void save(PaymentEntity paymentEntity) {
         paymentRepository.save(paymentEntity);
     }
+    
 
     @Override
     public PaymentSummaryResponseDTO getPaymentSummary(LocalDateTime from, LocalDateTime to) {
