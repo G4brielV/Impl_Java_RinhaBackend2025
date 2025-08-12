@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 
 @Service
@@ -29,7 +30,8 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
 
     private final PaymentService paymentService;
     private final PaymentSenderService paymentSenderService;
-    private final ExecutorService paymentExecutor; // Injetar nosso executor
+    private final ExecutorService paymentExecutor;
+
 
     public PaymentProcessorJobImpl(PaymentService paymentService,
                                    PaymentSenderService paymentSenderService,
@@ -39,35 +41,39 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
         this.paymentExecutor = paymentExecutor;
     }
 
-    // Substitui o método antigo por um método agendado
-    @Scheduled(fixedDelay = 15) // Executa a cada 15 milissegundos
+    @Scheduled(fixedDelay = 15)
     @Override
     public void processPayment() {
-        // Pega até 20 pagamentos da fila de uma vez para processar em paralelo
+        // Drena até 100 pagamentos da fila para uma lsita local
         List<PaymentEntity> paymentsToProcess = new ArrayList<>();
-        int batchSize = 20;
-        for (int i = 0; i < batchSize; i++) {
-            PaymentEntity payment = paymentService.dequeuePayment(); // Usaremos um dequeue não bloqueante
-            if (payment == null) {
-                break; // Fila vazia
-            }
-            paymentsToProcess.add(payment);
-        }
+        paymentService.drainQueue(paymentsToProcess, 100);
 
         if (paymentsToProcess.isEmpty()) {
             return;
         }
 
-        // Submete cada pagamento para ser processado em uma thread virtual
+        // Fila para coletar pagamentos processados com sucesso
+        ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
+
         List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
-                .map(payment -> CompletableFuture.runAsync(() -> processSinglePayment(payment), paymentExecutor))
+                .map(payment -> CompletableFuture.runAsync(() -> {
+                    if (processSinglePayment(payment)) {
+                        processedSuccessfully.add(payment);
+                    }
+                }, paymentExecutor))
                 .toList();
 
-        // Opcional: esperar a conclusão do lote. Para um sistema "fire-and-forget", isso não é estritamente necessário.
-        // CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        // Espera que todas as tarefas do lote terminem
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        // Salva todos os pagamentos bem-sucedidos de uma vez
+        if (!processedSuccessfully.isEmpty()) {
+            paymentService.saveAll(new ArrayList<>(processedSuccessfully));
+            logger.info("Lote de {} pagamentos salvo no banco de dados.", processedSuccessfully.size());
+        }
     }
 
-    private void processSinglePayment(PaymentEntity payment) {
+    private boolean processSinglePayment(PaymentEntity payment) {
         try {
             logger.info("Processando pagamento com correlationId: {}", payment.getCorrelationId());
 
@@ -82,8 +88,7 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
             if (success) {
                 logger.info("Pagamento {} enviado para o processador DEFAULT com sucesso.", payment.getCorrelationId());
                 payment.setDefault(true);
-                paymentService.save(payment);
-                return; // Sucesso, encerra o processamento para este pagamento
+                return true; // Sucesso, encerra o processamento para este pagamento
             }
 
             // Se o padrão falhar, loga e tenta o fallback
@@ -93,18 +98,18 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
             if (success) {
                 logger.info("Pagamento {} enviado para o processador FALLBACK com sucesso.", payment.getCorrelationId());
                 payment.setDefault(false);
-                paymentService.save(payment);
-                return; // Sucesso, encerra o processamento
+                return true; // Sucesso, encerra o processamento
             }
 
             // Se ambos falharem, recoloca o item na fila
             logger.error("Ambos os processadores falharam para o pagamento {}. Devolvendo para a fila.", payment.getCorrelationId());
             paymentService.enqueuePayment(payment);
+            return false;
 
         } catch (Exception e) {
             logger.error("Erro inesperado ao processar pagamento {}. Devolvendo para a fila.", payment.getCorrelationId(), e);
             paymentService.enqueuePayment(payment);
+            return false;
         }
     }
-
 }

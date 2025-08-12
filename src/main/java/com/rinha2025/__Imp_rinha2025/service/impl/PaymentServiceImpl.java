@@ -60,7 +60,17 @@ public class PaymentServiceImpl implements PaymentService {
     public void save(PaymentEntity paymentEntity) {
         paymentRepository.save(paymentEntity);
     }
-    
+
+    @Override
+    public void saveAll(List<PaymentEntity> payments) {
+        paymentRepository.saveAll(payments);
+    }
+
+    @Override
+    public void drainQueue(List<PaymentEntity> collection, int maxElements) {
+        queue.drainTo(collection, maxElements);
+    }
+
 
     @Override
     public PaymentSummaryResponseDTO getPaymentSummary(LocalDateTime from, LocalDateTime to) {

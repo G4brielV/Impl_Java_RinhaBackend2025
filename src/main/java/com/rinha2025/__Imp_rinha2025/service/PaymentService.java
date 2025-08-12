@@ -6,6 +6,7 @@ import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface PaymentService {
 
@@ -18,4 +19,8 @@ public interface PaymentService {
     PaymentEntity dequeuePayment();
 
     void save(PaymentEntity paymentEntity);
+
+    void saveAll(List<PaymentEntity> payments);
+
+    void drainQueue(List<PaymentEntity> collection, int maxElements);
 }
