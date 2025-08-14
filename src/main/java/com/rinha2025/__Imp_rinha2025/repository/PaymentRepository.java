@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Repository
@@ -24,7 +24,7 @@ public interface PaymentRepository extends JpaRepository<PaymentEntity, Long> {
                 GROUP BY p.is_default
             """, nativeQuery = true)
     List<PaymentSummaryProjection> findSummaryByDateRange(
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to
+            @Param("from") Instant from,
+            @Param("to") Instant to
     );
 }

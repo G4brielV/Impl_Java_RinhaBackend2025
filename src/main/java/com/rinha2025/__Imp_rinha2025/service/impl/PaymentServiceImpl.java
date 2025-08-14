@@ -9,8 +9,10 @@ import com.rinha2025.__Imp_rinha2025.repository.PaymentRepository;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -19,7 +21,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
 
-    private final BlockingQueue<PaymentEntity> queue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
 
     public PaymentServiceImpl(PaymentRepository paymentRepository) {
         this.paymentRepository = paymentRepository;
@@ -27,33 +29,25 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public void processPayment(PaymentRequestDTO requestDTO) {
-        // TODO: Convert the requestDTO to PaymentEntity and enqueue it for processing
-        PaymentEntity paymentEntity = new PaymentEntity(
-                requestDTO.correlationId(),
-                requestDTO.amount(),
-                LocalDateTime.now(),
-                true);
-        enqueuePayment(paymentEntity);
+        // TODO: Convert the requestDTO to JSON and enqueue it for processing
+        String amountStr = String.format(Locale.US, "%.2f", requestDTO.amount());
+
+        String paymentJson = "{\"correlationId\":\"" + requestDTO.correlationId() +
+                "\",\"amount\":" + amountStr +
+                ",\"requestedAt\":\"" + Instant.now().toString() + "\"}";
+        enqueuePayment(paymentJson);
     }
 
     @Override
-    public void enqueuePayment(PaymentEntity requestEntity) {
-        queue.offer(requestEntity);
+    public void enqueuePayment(String paymentJson) {
+        queue.offer(paymentJson);
     }
 
     @Override
-    public PaymentEntity dequeuePayment() {
+    public String dequeuePayment() {
         // poll() retorna null imediatamente se a fila estiver vazia,
         // ao invés de esperar como o take().
         return queue.poll();
-
-        /*
-        try {
-            return queue.take();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-         */
     }
 
     @Override
@@ -63,17 +57,19 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public void saveAll(List<PaymentEntity> payments) {
-        paymentRepository.saveAll(payments);
+        if (payments != null && !payments.isEmpty()) {
+            paymentRepository.saveAll(payments);
+        }
     }
 
     @Override
-    public void drainQueue(List<PaymentEntity> collection, int maxElements) {
+    public void drainQueue(List<String> collection, int maxElements) {
         queue.drainTo(collection, maxElements);
     }
 
 
     @Override
-    public PaymentSummaryResponseDTO getPaymentSummary(LocalDateTime from, LocalDateTime to) {
+    public PaymentSummaryResponseDTO getPaymentSummary(Instant from, Instant to) {
         List<PaymentSummaryProjection> summaryList = paymentRepository.findSummaryByDateRange(from, to);
 
         PaymentResultsDTO defaultResults = new PaymentResultsDTO(0, 0.0);

@@ -1,10 +1,8 @@
 package com.rinha2025.__Imp_rinha2025.config;
 
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentProcessorRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentResultsDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
-import com.rinha2025.__Imp_rinha2025.model.projection.PaymentSummaryProjection;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -23,7 +21,6 @@ public class NativeHints implements RuntimeHintsRegistrar {
         // Dicas para os DTOs (problema do JSON "No HttpMessageConverter")
         // Registra todos os DTOs para reflection, permitindo que o Jackson os serialize.
         var memberCategories = new MemberCategory[]{ MemberCategory.INVOKE_DECLARED_CONSTRUCTORS, MemberCategory.INVOKE_PUBLIC_METHODS};
-        hints.reflection().registerType(PaymentProcessorRequestDTO.class, memberCategories);
         hints.reflection().registerType(PaymentRequestDTO.class, memberCategories);
         hints.reflection().registerType(PaymentResultsDTO.class, memberCategories);
         hints.reflection().registerType(PaymentSummaryResponseDTO.class, memberCategories);

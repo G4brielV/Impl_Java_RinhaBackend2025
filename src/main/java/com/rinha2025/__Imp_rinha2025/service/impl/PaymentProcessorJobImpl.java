@@ -1,7 +1,6 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
 import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentProcessorRequestDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentProcessorJob;
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
@@ -45,7 +44,7 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
     @Override
     public void processPayment() {
         // Drena até 100 pagamentos da fila para uma lsita local
-        List<PaymentEntity> paymentsToProcess = new ArrayList<>();
+        List<String> paymentsToProcess = new ArrayList<>();
         paymentService.drainQueue(paymentsToProcess, 100);
 
         if (paymentsToProcess.isEmpty()) {
@@ -56,9 +55,10 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
         ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
 
         List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
-                .map(payment -> CompletableFuture.runAsync(() -> {
-                    if (processSinglePayment(payment)) {
-                        processedSuccessfully.add(payment);
+                .map(paymentJson -> CompletableFuture.runAsync(() -> {
+                    PaymentEntity successfulEntity = processSinglePayment(paymentJson);
+                    if (successfulEntity != null) {
+                        processedSuccessfully.add(successfulEntity);
                     }
                 }, paymentExecutor))
                 .toList();
@@ -73,43 +73,40 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
         }
     }
 
-    private boolean processSinglePayment(PaymentEntity payment) {
+    private PaymentEntity  processSinglePayment(String paymentJson) {
+        String correlationId = paymentJson.substring(18, 54);
         try {
-            logger.info("Processando pagamento com correlationId: {}", payment.getCorrelationId());
-
-            PaymentProcessorRequestDTO requestDTO = new PaymentProcessorRequestDTO(
-                    payment.getCorrelationId(),
-                    payment.getAmount(),
-                    payment.getCreatedAt().toString());
+            logger.info("Processando pagamento com correlationId: {}", correlationId);
 
             // Tenta o processador padrão
-            boolean success = paymentSenderService.send(requestDTO, defaultPaymentProcessorUrl);
-
+            boolean success = paymentSenderService.send(paymentJson, defaultPaymentProcessorUrl);
             if (success) {
-                logger.info("Pagamento {} enviado para o processador DEFAULT com sucesso.", payment.getCorrelationId());
-                payment.setDefault(true);
-                return true; // Sucesso, encerra o processamento para este pagamento
+                logger.info("Pagamento {} enviado para o processador DEFAULT com sucesso.", correlationId);
+                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
+                entity.setDefault(true);
+                return entity;
             }
 
             // Se o padrão falhar, loga e tenta o fallback
-            logger.warn("Falha ao enviar para o processador DEFAULT. Tentando FALLBACK para o pagamento {}.", payment.getCorrelationId());
-            success = paymentSenderService.send(requestDTO, fallbackPaymentProcessorUrl);
+            logger.warn("Falha ao enviar para o processador DEFAULT. Tentando FALLBACK para o pagamento {}.", correlationId);
+            success = paymentSenderService.send(paymentJson, fallbackPaymentProcessorUrl);
 
             if (success) {
-                logger.info("Pagamento {} enviado para o processador FALLBACK com sucesso.", payment.getCorrelationId());
-                payment.setDefault(false);
-                return true; // Sucesso, encerra o processamento
+                logger.info("Pagamento {} enviado para o processador FALLBACK com sucesso.", correlationId);
+                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
+                entity.setDefault(false);
+                return entity;
             }
 
             // Se ambos falharem, recoloca o item na fila
-            logger.error("Ambos os processadores falharam para o pagamento {}. Devolvendo para a fila.", payment.getCorrelationId());
-            paymentService.enqueuePayment(payment);
-            return false;
+            logger.error("Ambos os processadores falharam para o pagamento {}. Devolvendo para a fila.", correlationId);
+            paymentService.enqueuePayment(paymentJson);
+            return null; //Falha
 
         } catch (Exception e) {
-            logger.error("Erro inesperado ao processar pagamento {}. Devolvendo para a fila.", payment.getCorrelationId(), e);
-            paymentService.enqueuePayment(payment);
-            return false;
+            logger.error("Erro inesperado ao processar pagamento {}. Devolvendo para a fila.", correlationId, e);
+            paymentService.enqueuePayment(paymentJson);
+            return null;
         }
     }
 }
