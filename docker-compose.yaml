@@ -19,8 +19,7 @@ services:
     command: ["nginx", "-g", "daemon off;"]
 
   api1:
-    #image: g4brielv/rinha-backend-2025:standard
-    image: g4brielv/rinhabackend2025_imp_1:latest
+    image: g4brielv/rinha-backend-2025:v6
     #build: .
     container_name: rinha-api-1
     environment:
@@ -44,8 +43,7 @@ services:
           memory: "105MB"
 
   api2:
-    #image: g4brielv/rinha-backend-2025:standard
-    image: g4brielv/rinhabackend2025_imp_1:latest
+    image: g4brielv/rinha-backend-2025:v6
     #build: .
     container_name: rinha-api-2
     environment:
