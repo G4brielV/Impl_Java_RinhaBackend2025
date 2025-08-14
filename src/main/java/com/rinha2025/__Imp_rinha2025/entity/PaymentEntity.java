@@ -1,39 +1,48 @@
 package com.rinha2025.__Imp_rinha2025.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 @Entity
 @Table(name = "payments")
 public class PaymentEntity {
 
+    private static final Pattern JSON_PATTERN = Pattern.compile(
+            "\\{\"correlationId\":\"(.*?)\",\"amount\":(.*?),\"requestedAt\":\"(.*?)\"(,\"isDefault\":(true|false))?\\}"
+    );
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
     private String correlationId;
     private Double amount;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     private Boolean isDefault;
 
     public PaymentEntity() {
     }
 
-    public PaymentEntity(String correlationId, Double amount, LocalDateTime createdAt, Boolean isDefault) {
+    public PaymentEntity(String correlationId, Double amount, Instant createdAt, Boolean isDefault) {
         this.correlationId = correlationId;
         this.amount = amount;
         this.createdAt = createdAt;
         this.isDefault = isDefault;
     }
 
-    public Long getId() {
-        return id;
+    public static PaymentEntity fromJson(String json) {
+        Matcher matcher = JSON_PATTERN.matcher(json);
+        if (matcher.find()) {
+            String correlationId = matcher.group(1);
+            double amount = Double.parseDouble(matcher.group(2));
+            Instant createdAt = Instant.parse(matcher.group(3));
+            return new PaymentEntity(correlationId, amount, createdAt, null);
+        }
+        throw new IllegalArgumentException("Invalid JSON format for PaymentEntity: " + json);
     }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
 
     public Double getAmount() {
         return amount;
@@ -51,11 +60,11 @@ public class PaymentEntity {
         this.correlationId = correlationId;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
+    public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
 

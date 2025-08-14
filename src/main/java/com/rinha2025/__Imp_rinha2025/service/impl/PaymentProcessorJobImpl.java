@@ -1,16 +1,18 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
 import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
-import com.rinha2025.__Imp_rinha2025.model.dto.PaymentProcessorRequestDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentProcessorJob;
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
 
 @Service
 public class PaymentProcessorJobImpl implements PaymentProcessorJob {
@@ -23,48 +25,76 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
 
     private final PaymentService paymentService;
     private final PaymentSenderService paymentSenderService;
-    private final PaymentProcessorJob self;
+    private final ExecutorService paymentExecutor;
 
-    public PaymentProcessorJobImpl(PaymentService paymentService, PaymentSenderService paymentSenderService, @Lazy PaymentProcessorJob self) {
+
+    public PaymentProcessorJobImpl(PaymentService paymentService,
+                                   PaymentSenderService paymentSenderService,
+                                   ExecutorService paymentExecutor) { // Modificar construtor
         this.paymentService = paymentService;
         this.paymentSenderService = paymentSenderService;
-        this.self = self;
+        this.paymentExecutor = paymentExecutor;
     }
 
-    @Async
+    @Scheduled(fixedDelay = 15)
     @Override
     public void processPayment() {
-        //TODO: Dequeue and process the payments
-        while (true) {
-            PaymentEntity payment = paymentService.dequeuePayment();
+        // Drena até 100 pagamentos da fila para uma lsita local
+        List<String> paymentsToProcess = new ArrayList<>();
+        paymentService.drainQueue(paymentsToProcess, 100);
 
-            PaymentProcessorRequestDTO paymentProcessorRequestDTO = new PaymentProcessorRequestDTO(payment.getCorrelationId(), payment.getAmount(), payment.getCreatedAt().toString());
-            if (paymentProcessorRequestDTO != null) {
-                boolean sentDefault = false;
-                boolean sentFallback = false;
-                while (!sentDefault && !sentFallback) {
-                    sentDefault = paymentSenderService.send(paymentProcessorRequestDTO, defaultPaymentProcessorUrl);
-                    if (!sentDefault) {
-                        sentFallback = paymentSenderService.send(paymentProcessorRequestDTO, fallbackPaymentProcessorUrl);
-                        if (sentFallback) {
-                            payment.setDefault(false);
-                        }
+        if (paymentsToProcess.isEmpty()) {
+            return;
+        }
+
+        // Fila para coletar pagamentos processados com sucesso
+        ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
+
+        List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
+                .map(paymentJson -> CompletableFuture.runAsync(() -> {
+                    PaymentEntity successfulEntity = processSinglePayment(paymentJson);
+                    if (successfulEntity != null) {
+                        processedSuccessfully.add(successfulEntity);
                     }
-                }
-                paymentService.save(payment);
-            } else {
-                try {
-                    Thread.sleep(100); // Evita busy-wait
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+                }, paymentExecutor))
+                .toList();
+
+        // Espera que todas as tarefas do lote terminem
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        // Salva todos os pagamentos bem-sucedidos de uma vez
+        if (!processedSuccessfully.isEmpty()) {
+            paymentService.saveAll(new ArrayList<>(processedSuccessfully));
         }
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    @Override
-    public void startJob() {
-        processPayment();
+    private PaymentEntity  processSinglePayment(String paymentJson) {
+        String correlationId = paymentJson.substring(18, 54);
+        try {
+            // Tenta o processador padrão
+            boolean success = paymentSenderService.send(paymentJson, defaultPaymentProcessorUrl);
+            if (success) {
+                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
+                entity.setDefault(true);
+                return entity;
+            }
+
+            // Se o padrão falhar, loga e tenta o fallback
+            success = paymentSenderService.send(paymentJson, fallbackPaymentProcessorUrl);
+
+            if (success) {
+                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
+                entity.setDefault(false);
+                return entity;
+            }
+
+            // Se ambos falharem, recoloca o item na fila
+            paymentService.enqueuePayment(paymentJson);
+            return null; //Falha
+
+        } catch (Exception e) {
+            paymentService.enqueuePayment(paymentJson);
+            return null;
+        }
     }
 }
