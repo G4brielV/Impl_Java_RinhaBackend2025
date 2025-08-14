@@ -2,8 +2,6 @@ package com.rinha2025.__Imp_rinha2025.service.impl;
 
 
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -16,7 +14,6 @@ import java.time.Duration;
 @Service
 public class PaymentSenderServiceImpl implements PaymentSenderService {
 
-    private static final Logger logger = LoggerFactory.getLogger(PaymentSenderServiceImpl.class);
     private final HttpClient httpClient;
 
     public PaymentSenderServiceImpl(HttpClient httpClient) {
@@ -33,14 +30,11 @@ public class PaymentSenderServiceImpl implements PaymentSenderService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            logger.info("Enviando para URL [{}], Body [{}]", url, requestBody);
 
             HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 
-            logger.info("Recebido da URL [{}], Status Code [{}]", url, response.statusCode());
             return response.statusCode() == 200 || response.statusCode() == 422;
         } catch (Exception e) {
-            logger.error("Erro ao enviar pagamento para a URL: {} - {}", url, e.getMessage());
             return false;
         }
     }
