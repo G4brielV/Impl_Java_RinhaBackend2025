@@ -60,6 +60,57 @@ Resposta:
 * **Objetivo:** Reduzir o consumo de memória e CPU. A JVM padrão consumia muitos recursos, dificultando o equilíbrio com o PostgreSQL dentro dos limites do desafio.
 * **Resultado:** O uso de recursos melhorou significativamente. No entanto, o modelo de um *worker* sequencial limitava drasticamente a quantidade de transações processadas, impedindo um aumento significativo no volume de transações.
 
+🚀 Passo a Passo da compilação:
+1. Plugin do Spring Boot com Buildpacks:
+```pom.xml
+<plugin>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-maven-plugin</artifactId>
+    <configuration>
+        <image>
+            <name>g4brielv/rinhabackend2025_imp_1:latest</name>
+            <builder>paketobuildpacks/builder-jammy-base:latest</builder>
+            <env>
+                <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+                <BP_JVM_VERSION>21</BP_JVM_VERSION>
+            </env>
+        </image>
+    </configuration>
+    <executions>
+        <execution>
+            <id>process-aot</id>
+            <goals>
+                <goal>process-aot</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>
+```
+2. Definir o Profile:
+```pom.xml
+<profiles>
+    <profile>
+        <id>native</id>
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.graalvm.buildtools</groupId>
+                    <artifactId>native-maven-plugin</artifactId>
+                    ...
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
+</profiles>
+```
+3. Abra o terminal de desenvolvedor: É importante usar um terminal que tenha as ferramentas de build C++ configuradas, como o "x64 Native Tools Command Prompt for VS" no Windows.
+4. Navegue até a pasta do projeto.
+5. Execute o comando de build do Maven:
+   ```Bash
+   mvn clean
+   mvn spring-boot:build-image -Pnative -DskipTests
+   ```
+
 ---
 
 ### Versão 3: Concorrência
@@ -72,11 +123,20 @@ Inspirada em soluções de alta performance da comunidade, principalmente no [v�
 
 ---
 
-### Versão 4: Banco de Dados (`branch: main`)
+### Versão 4: Banco de Dados 
 
 * **Tecnologias:** `📦 Inserts em Lote (Batch Inserts)`, `⚙️ Otimizações de JPA/Hibernate`.
 * **Objetivo:** Aliviar a pressão sobre o PostgreSQL, tornando as operações de escrita muito mais eficientes para eliminar as inconsistências e os timeouts.
 * **Resultado:** Ao agrupar os `INSERTs` em lotes, a contenção no banco de dados melhorou, as **inconsistências foram zeradas** e o `total_transactions_amount` atingiu um valor muito bom.
+
+---
+
+### Versão 5: 🌐 Otimização da Rede e do Payload (`branch: main`)
+* **Tecnologias:** 📡 HttpClient nativo do Java, 📜 Estratégia "JSON desde a chegada".
+* **Objetivo:** Reduzir a latência e a sobrecarga da CPU na comunicação com os processadores de pagamento e no processamento assíncrono.
+* **Resultado:** A comunicação de rede se tornou mais eficiente com o HttpClient. A estratégia de converter o payload para JSON uma única vez, no momento da chegada, diminuiu o trabalho repetitivo da CPU no fluxo assíncrono, contribuindo para a estabilidade geral do sistema sob carga.
+
+---
 
 ## 🧩 Arquitetura
 - nginx: Gateway de entrada das requisições.
