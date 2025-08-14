@@ -1,8 +1,7 @@
 CREATE TABLE payments (
-    id SERIAL PRIMARY KEY,
-    correlation_id VARCHAR(100),
+    correlation_id VARCHAR(100) PRIMARY KEY,
     amount DOUBLE PRECISION NOT NULL,
-    created_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     is_default BOOLEAN DEFAULT TRUE
 );
 

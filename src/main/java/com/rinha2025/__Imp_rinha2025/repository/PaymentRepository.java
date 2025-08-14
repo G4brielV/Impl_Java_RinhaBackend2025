@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 
 @Repository
-public interface PaymentRepository extends JpaRepository<PaymentEntity, Long> {
+public interface PaymentRepository extends JpaRepository<PaymentEntity, String> {
 
     @Query(value = """
                 SELECT 
