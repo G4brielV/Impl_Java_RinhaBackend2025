@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export GIT_EDITOR=true
+
 startContainers() {
     pushd ../payment-processor > /dev/null
         docker compose up --build -d 1> /dev/null 2>&1
@@ -17,22 +19,57 @@ stopContainers() {
     pushd ../participantes/$1
         docker compose down -v --remove-orphans
         docker compose rm -s -v -f
+        sudo find * -group root | xargs sudo rm -rf
     popd > /dev/null
     pushd ../payment-processor > /dev/null
         docker compose down --volumes > /dev/null
     popd > /dev/null
 }
 
+scheduleReboot() {
+    epoch=$(date +%s)
+    schedule_epochtime=$((epoch + (5 * 60)))
+    schedule_datetime=$(date -d @$schedule_epochtime +"%Y-%m-%dT%H:%M:%S")
+
+    aws scheduler create-schedule \
+        --name OneTimeScheduler-$epoch \
+        --schedule-expression "at($schedule_datetime)" \
+        --target "{\"Arn\": \"arn:aws:lambda:us-east-1:${AWS_ACCOUNT}:function:start-ec2-instance\", \"RoleArn\": \"arn:aws:iam::${AWS_ACCOUNT}:role/service-role/start-ec2-instance-role\"}" \
+        --flexible-time-window '{"Mode": "OFF"}' \
+        --region us-east-1
+}
+
+maybeReboot() {
+    pushd ../participantes/$1 > /dev/null
+    pull_errors=$(grep -l "Error toomanyrequests" docker-compose.logs | wc -l)
+    if [ $pull_errors -gt 0 ]; then
+        echo "Preparing to shutdown due to docker pull limit errors"
+        stopContainers $1
+        rm docker-compose.logs
+        rm partial-results.json
+        scheduleReboot
+        sleep 15
+        sudo shutdown now
+        kill -9 $$
+        exit 0
+    fi
+    popd > /dev/null
+}
+
 MAX_REQUESTS=550
 
 while true; do
+
     for directory in ../participantes/*; do
     (
         git pull
         participant=$(echo $directory | sed -e 's/..\/participantes\///g' -e 's/\///g')
-        echo "participant: $participant"
+        echo ""
+        echo ""
+	    echo "========================================"
+        echo "  Participant $participant starting..."
+        echo "========================================"
 
-        
         testedFile="$directory/partial-results.json"
 
         if ! test -f $testedFile; then
@@ -40,12 +77,13 @@ while true; do
             echo "executing test for $participant..."
             stopContainers $participant
             startContainers $participant
-            
+            maybeReboot $participant
+
             success=1
             max_attempts=15
             attempt=1
             while [ $success -ne 0 ] && [ $max_attempts -ge $attempt ]; do
-                curl -f -s http://localhost:9999/payments-summary
+                curl -f -s --max-time 3 localhost:9999/payments-summary
                 success=$?
                 echo "tried $attempt out of $max_attempts..."
                 sleep 5
@@ -73,8 +111,16 @@ while true; do
             git commit -m "add $participant's partial result"
             git push
 
+            echo "================================="
+            echo "  Finished testing $participant!"
+            echo "================================="
+
+            sleep 5
+
         else
-            echo "skipping $participant"
+            echo "================================="
+            echo "  Skipping $participant"
+            echo "================================="
         fi
     )
     done
@@ -119,7 +165,11 @@ while true; do
     )
     done
 
+    PREVIA_RESULTADOS_JSON=../previa-resultados+participantes-info.json
+    python3 previa_resultados_json.py $PREVIA_RESULTADOS_JSON
+    
     git pull
+    git add $PREVIA_RESULTADOS_JSON
     git add $PREVIA_RESULTADOS
     git commit -m "previa resultados @ $(date)"
     git push

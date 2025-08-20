@@ -38,7 +38,7 @@ export K6_WEB_DASHBOARD_EXPORT='report.html'
 Se quiser alterar o número máximo de requisições simultâneas, você poderá definiar a variável `MAX_REQUESTS` no comando para executar o teste em vez de alterar o script.
 
 ```shell
-k6 run -e MAX_REQUESTS=850 rinha.js
+k6 run -e MAX_REQUESTS=550 rinha.js
 ```
 
 ### Contribuição com o Script de Teste
