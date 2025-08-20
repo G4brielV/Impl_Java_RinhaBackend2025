@@ -153,25 +153,38 @@ Inspirada em soluções de alta performance da comunidade, principalmente no [v�
 | api2     | 0.5 | 105MB   |
 | postgres | 0.3 | 120MB   |
 
-## ▶️ Como Executar
-⚠️ É necessário ter o Docker instalado na máquina
-  
-1. Subir o ambiente da Rinha
-   ```bash
-   docker compose -f docker-compose-rinha.yaml up -d
-   ```
-2. Subir o projeto (APIs, banco, nginx)
-   ```bash
-   docker compose up --build -d
-   ```
-## 🧪 Testes de Carga
-```bash
-cd rinha-test
-k6 run rinha.js
-```
-
 ## 📁 Organização
 - src/: Código-fonte da aplicação Java
 - docker-compose.yml: Compose principal do projeto
 - docker-compose-rinha.yaml: Compose fornecido pela organização da Rinha
 - rinha-test/: Scripts de teste de carga com K6
+
+## ▶️ Como Executar
+⚠️ **Pré-requisito:** ter o **Docker** instalado na máquina.
+  
+1. **Subir o ambiente da Rinha** 
+   ```bash
+   docker compose -f docker-compose-rinha.yaml up -d
+   ```
+2. **Subir o projeto** (APIs, banco, nginx)
+   ```bash
+   docker compose up -d
+   ```
+## 🧪 Testes de Carga
+Acesse a pasta dos scripts de teste:
+```bash
+cd rinha-test
+```
+- **Rodar prévias**:
+   ```bash
+    k6 run rinha.js
+   ```
+- **Rodar carga final**:
+   ```bash
+    k6 run rinha-final.js
+    ``` 
+## 🏁 Resultados
+
+- 📌 **Resultado individual:** [Repositório Oficial](https://github.com/zanfranceschi/rinha-de-backend-2025/tree/main/participantes/g4brielV-java1)  
+- 🔎 **Prévia dos Resultados:** [Ver aqui](https://github.com/zanfranceschi/rinha-de-backend-2025/blob/main/PREVIA_RESULTADOS.md)  
+- 🏆 **Ranking Final:** [Resultados Finais](https://github.com/zanfranceschi/rinha-de-backend-2025/blob/main/RESULTADOS_FINAIS.md) → **97º lugar**
