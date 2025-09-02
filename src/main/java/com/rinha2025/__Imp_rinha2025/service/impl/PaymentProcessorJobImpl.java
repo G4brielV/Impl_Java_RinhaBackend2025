@@ -30,7 +30,7 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
 
     public PaymentProcessorJobImpl(PaymentService paymentService,
                                    PaymentSenderService paymentSenderService,
-                                   ExecutorService paymentExecutor) { // Modificar construtor
+                                   ExecutorService paymentExecutor) {
         this.paymentService = paymentService;
         this.paymentSenderService = paymentSenderService;
         this.paymentExecutor = paymentExecutor;
@@ -39,7 +39,7 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
     @Scheduled(fixedDelay = 15)
     @Override
     public void processPayment() {
-        // Drena até 100 pagamentos da fila para uma lsita local
+        // Drena até 100 pagamentos da fila para uma lista local
         List<String> paymentsToProcess = new ArrayList<>();
         paymentService.drainQueue(paymentsToProcess, 100);
 
@@ -47,24 +47,31 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
             return;
         }
 
-        // Fila para coletar pagamentos processados com sucesso
-        ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
+        // Sinaliza o início do processamento
+        paymentService.startProcessing();
+        try {
+            // Fila para coletar pagamentos processados com sucesso
+            ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
 
-        List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
-                .map(paymentJson -> CompletableFuture.runAsync(() -> {
-                    PaymentEntity successfulEntity = processSinglePayment(paymentJson);
-                    if (successfulEntity != null) {
-                        processedSuccessfully.add(successfulEntity);
-                    }
-                }, paymentExecutor))
-                .toList();
+            List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
+                    .map(paymentJson -> CompletableFuture.runAsync(() -> {
+                        PaymentEntity successfulEntity = processSinglePayment(paymentJson);
+                        if (successfulEntity != null) {
+                            processedSuccessfully.add(successfulEntity);
+                        }
+                    }, paymentExecutor))
+                    .toList();
 
-        // Espera que todas as tarefas do lote terminem
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            // Espera que todas as tarefas do lote terminem
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // Salva todos os pagamentos bem-sucedidos de uma vez
-        if (!processedSuccessfully.isEmpty()) {
-            paymentService.saveAll(new ArrayList<>(processedSuccessfully));
+            // Salva todos os pagamentos bem-sucedidos de uma vez
+            if (!processedSuccessfully.isEmpty()) {
+                paymentService.saveAll(new ArrayList<>(processedSuccessfully));
+            }
+        } finally {
+            // Garante que o fim do processamento seja sinalizado
+            paymentService.endProcessing();
         }
     }
 

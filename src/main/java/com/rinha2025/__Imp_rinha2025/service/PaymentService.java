@@ -23,4 +23,10 @@ public interface PaymentService {
     void saveAll(List<PaymentEntity> payments);
 
     void drainQueue(List<String> collection, int maxElements);
+
+    void startProcessing();
+
+    void endProcessing();
+
+    void awaitAllProcessors();
 }
