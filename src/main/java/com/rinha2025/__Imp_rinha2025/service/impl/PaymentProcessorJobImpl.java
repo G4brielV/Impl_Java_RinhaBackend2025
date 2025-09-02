@@ -75,8 +75,7 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
         }
     }
 
-    private PaymentEntity  processSinglePayment(String paymentJson) {
-        String correlationId = paymentJson.substring(18, 54);
+    private PaymentEntity processSinglePayment(String paymentJson) {
         try {
             // Tenta o processador padrão
             boolean success = paymentSenderService.send(paymentJson, defaultPaymentProcessorUrl);
