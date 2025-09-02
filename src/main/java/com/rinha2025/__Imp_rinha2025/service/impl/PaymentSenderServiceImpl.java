@@ -33,7 +33,7 @@ public class PaymentSenderServiceImpl implements PaymentSenderService {
 
             HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 
-            return response.statusCode() == 200 || response.statusCode() == 422;
+            return response.statusCode() == 200;
         } catch (Exception e) {
             return false;
         }
