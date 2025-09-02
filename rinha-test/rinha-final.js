@@ -217,7 +217,7 @@ const paymentRequestFixedAmount = new Big(20.05);
 export async function teardown() {
 
   const to = new Date();
-  const from = new Date(to.getTime() - 70 * 1000); // 1 minuto e 10 segundos atrás
+  const from = new Date(to.getTime() - (6 * 60 * 1000)); // 6 minutos atrás
 
   console.info(`summaries from ${from.toISOString()} to ${to.toISOString()}`);
 
