@@ -1,4 +1,4 @@
-CREATE TABLE payments (
+CREATE UNLOGGED TABLE payments (
     correlation_id VARCHAR(100) PRIMARY KEY,
     amount DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,

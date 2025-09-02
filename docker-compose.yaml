@@ -19,7 +19,8 @@ services:
     command: ["nginx", "-g", "daemon off;"]
 
   api1:
-    image: g4brielv/rinha-backend-2025:v6
+    #image: g4brielv/rinha-backend-2025:v6
+    image: g4brielv/rinhabackend2025_imp_1:latest
     #build: .
     container_name: rinha-api-1
     environment:
@@ -43,7 +44,8 @@ services:
           memory: "105MB"
 
   api2:
-    image: g4brielv/rinha-backend-2025:v6
+    #image: g4brielv/rinha-backend-2025:v6
+    image: g4brielv/rinhabackend2025_imp_1:latest
     #build: .
     container_name: rinha-api-2
     environment:
@@ -69,6 +71,7 @@ services:
   postgresql-rinha:
     image: postgres:16
     container_name: rinha-postgresql
+    command: postgres -c synchronous_commit=off -c fsync=off -c full_page_writes=off
     restart: always
     env_file:
       - .env
