@@ -3,37 +3,29 @@ package com.rinha2025.__Imp_rinha2025.service.impl;
 
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
 import org.springframework.stereotype.Service;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 @Service
 public class PaymentSenderServiceImpl implements PaymentSenderService {
 
-    private final HttpClient httpClient;
+    private final WebClient webClient;
 
-    public PaymentSenderServiceImpl(HttpClient httpClient) {
-        this.httpClient = httpClient;
+    public PaymentSenderServiceImpl(WebClient webClient) {
+        this.webClient = webClient;
     }
 
     @Override
     public boolean send(String requestBody, String url) {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofMillis(1500))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-
-
-            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-
-            return response.statusCode() == 200;
+            Integer statusCode = webClient.post()
+                    .uri(url)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .flatMap(response -> Mono.just(response.getStatusCode().value()))
+                    .block();
+            return statusCode != null && statusCode == 200;
         } catch (Exception e) {
             return false;
         }
