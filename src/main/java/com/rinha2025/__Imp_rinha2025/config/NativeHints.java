@@ -3,6 +3,7 @@ package com.rinha2025.__Imp_rinha2025.config;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentResultsDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
+import com.rinha2025.__Imp_rinha2025.model.dto.ServiceHealthDTO;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
@@ -24,5 +25,6 @@ public class NativeHints implements RuntimeHintsRegistrar {
         hints.reflection().registerType(PaymentRequestDTO.class, memberCategories);
         hints.reflection().registerType(PaymentResultsDTO.class, memberCategories);
         hints.reflection().registerType(PaymentSummaryResponseDTO.class, memberCategories);
+        hints.reflection().registerType(ServiceHealthDTO.class, memberCategories);
     }
 }

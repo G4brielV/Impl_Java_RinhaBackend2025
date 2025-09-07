@@ -25,7 +25,7 @@ public class WebClientConfig {
     int maxIdleTime = 60000;
     int maxLifeTime = 60000;
 
-    @Bean
+    @Bean("paymentWebClient")
     public WebClient webClient() {
         ConnectionProvider provider = ConnectionProvider.builder("rinha-connection-pool")
                 .maxConnections(maxConnections)
@@ -41,6 +41,25 @@ public class WebClientConfig {
                 .doOnConnected(conn -> conn
                         .addHandlerLast(new ReadTimeoutHandler(readTimeout / 1000))
                         .addHandlerLast(new WriteTimeoutHandler(writeTimeout / 1000)));
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+    }
+
+    @Bean("healthCheckWebClient")
+    public WebClient healthCheckWebClient() {
+        // Pool de conexão pequeno e dedicado para não competir com os pagamentos
+        ConnectionProvider provider = ConnectionProvider.builder("healthcheck-pool")
+                .maxConnections(5) // 5 conexões são mais que suficientes
+                .pendingAcquireTimeout(Duration.ofMillis(500))
+                .build();
+
+        HttpClient httpClient = HttpClient.create(provider)
+                // Timeout de conexão um pouco mais tolerante para o health check
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000)
+                .responseTimeout(Duration.ofMillis(2000));
 
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))

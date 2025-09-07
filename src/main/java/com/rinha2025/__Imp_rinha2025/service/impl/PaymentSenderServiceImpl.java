@@ -2,6 +2,7 @@ package com.rinha2025.__Imp_rinha2025.service.impl;
 
 
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -11,7 +12,7 @@ public class PaymentSenderServiceImpl implements PaymentSenderService {
 
     private final WebClient webClient;
 
-    public PaymentSenderServiceImpl(WebClient webClient) {
+    public PaymentSenderServiceImpl(@Qualifier("paymentWebClient") WebClient webClient) {
         this.webClient = webClient;
     }
 

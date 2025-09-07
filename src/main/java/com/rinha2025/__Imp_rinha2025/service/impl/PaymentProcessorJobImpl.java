@@ -1,6 +1,7 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
 import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
+import com.rinha2025.__Imp_rinha2025.model.Component.ProcessorHealthState;
 import com.rinha2025.__Imp_rinha2025.service.PaymentProcessorJob;
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
@@ -19,21 +20,23 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
 
     @Value("${payment.processor.default.url}")
     private String defaultPaymentProcessorUrl;
-
     @Value("${payment.processor.fallback.url}")
     private String fallbackPaymentProcessorUrl;
 
     private final PaymentService paymentService;
     private final PaymentSenderService paymentSenderService;
     private final ExecutorService paymentExecutor;
+    private final ProcessorHealthState healthState;
 
 
     public PaymentProcessorJobImpl(PaymentService paymentService,
                                    PaymentSenderService paymentSenderService,
-                                   ExecutorService paymentExecutor) {
+                                   ExecutorService paymentExecutor,
+                                   ProcessorHealthState healthState) {
         this.paymentService = paymentService;
         this.paymentSenderService = paymentSenderService;
         this.paymentExecutor = paymentExecutor;
+        this.healthState = healthState;
     }
 
     @Scheduled(fixedDelay = 15)
@@ -76,31 +79,30 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
     }
 
     private PaymentEntity processSinglePayment(String paymentJson) {
-        try {
-            // Tenta o processador padrão
-            boolean success = paymentSenderService.send(paymentJson, defaultPaymentProcessorUrl);
-            if (success) {
-                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
-                entity.setDefault(true);
-                return entity;
-            }
+        // 1. Pergunta qual o melhor processador no momento
+        ProcessorHealthState.Processor preferred = healthState.getPreferredProcessor();
+        String targetUrl;
+        boolean isDefaultProcessor;
 
-            // Se o padrão falhar, loga e tenta o fallback
-            success = paymentSenderService.send(paymentJson, fallbackPaymentProcessorUrl);
-
-            if (success) {
-                PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
-                entity.setDefault(false);
-                return entity;
-            }
-
-            // Se ambos falharem, recoloca o item na fila
-            paymentService.enqueuePayment(paymentJson);
-            return null; //Falha
-
-        } catch (Exception e) {
-            paymentService.enqueuePayment(paymentJson);
-            return null;
+        if (preferred == ProcessorHealthState.Processor.DEFAULT) {
+            targetUrl = defaultPaymentProcessorUrl;
+            isDefaultProcessor = true;
+        } else {
+            targetUrl = fallbackPaymentProcessorUrl;
+            isDefaultProcessor = false;
         }
+
+        // 2. Tenta enviar para o processador escolhido
+        boolean success = paymentSenderService.send(paymentJson, targetUrl);
+
+        if (success) {
+            PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
+            entity.setDefault(isDefaultProcessor);
+            return entity;
+        }
+
+        // 3. Se falhar, mesmo no "saudável", apenas re-enfileira.
+        paymentService.enqueuePayment(paymentJson);
+        return null;
     }
 }
