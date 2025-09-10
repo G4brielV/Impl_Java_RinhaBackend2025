@@ -1,5 +1,6 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
+import com.rinha2025.__Imp_rinha2025.config.RedisKeys;
 import com.rinha2025.__Imp_rinha2025.model.Component.ProcessorHealthState;
 import com.rinha2025.__Imp_rinha2025.model.dto.ServiceHealthDTO;
 import com.rinha2025.__Imp_rinha2025.service.HealthCheckService;
@@ -7,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -15,14 +16,13 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
-
 @Service
 public class HealthCheckServiceImpl implements HealthCheckService {
 
     private static final Logger logger = LoggerFactory.getLogger(HealthCheckServiceImpl.class);
     private final WebClient webClient;
     private final ProcessorHealthState healthState;
-    private final JdbcTemplate jdbcTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     @Value("${payment.processor.default.healthcheck.url}")
     private String defaultHealthUrl ;
@@ -31,10 +31,10 @@ public class HealthCheckServiceImpl implements HealthCheckService {
 
     private static final double PERFORMANCE_MULTIPLIER = 4.5;
 
-    public HealthCheckServiceImpl(@Qualifier("healthCheckWebClient") WebClient webClient, ProcessorHealthState healthState, JdbcTemplate jdbcTemplate) {
+    public HealthCheckServiceImpl(@Qualifier("healthCheckWebClient") WebClient webClient, ProcessorHealthState healthState, StringRedisTemplate redisTemplate) {
         this.webClient = webClient;
         this.healthState = healthState;
-        this.jdbcTemplate = jdbcTemplate;
+        this.redisTemplate = redisTemplate;
     }
 
 
@@ -49,9 +49,8 @@ public class HealthCheckServiceImpl implements HealthCheckService {
                 .subscribe(tuple -> {
                     ProcessorHealthState.Processor newPreferred = decidePreferredProcessor(tuple.getT1(), tuple.getT2());
 
-                    // ATUALIZA O ESTADO GLOBAL NO BANCO DE DADOS
-                    String updateSql = "UPDATE processor_health_status SET preferred_processor = ? WHERE lock_id = 1";
-                    jdbcTemplate.update(updateSql, newPreferred.name());
+                    // atualiza no redis
+                    redisTemplate.opsForValue().set(RedisKeys.PREFERRED_PROCESSOR, newPreferred.name());
 
                     // Estado local (cache)
                     healthState.setPreferredProcessor(newPreferred);

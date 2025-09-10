@@ -1,7 +1,7 @@
 package com.rinha2025.__Imp_rinha2025.service;
 
 
-import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
+import com.rinha2025.__Imp_rinha2025.model.dto.PaymentDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
 
@@ -14,19 +14,14 @@ public interface PaymentService {
 
     PaymentSummaryResponseDTO getPaymentSummary(Instant from, Instant to);
 
-    void enqueuePayment(String paymentJson);
+    void enqueuePayment(PaymentDTO paymentDTO);
 
-    String dequeuePayment();
+    PaymentDTO dequeuePayment();
 
-    void save(PaymentEntity paymentEntity);
+    void save(PaymentDTO paymentDTO);
 
-    void saveAll(List<PaymentEntity> payments);
+    void saveAll(List<PaymentDTO> payments);
 
-    void drainQueue(List<String> collection, int maxElements);
+    void drainQueue(List<PaymentDTO> collection, int maxElements);
 
-    void startProcessing();
-
-    void endProcessing();
-
-    void awaitAllProcessors();
 }

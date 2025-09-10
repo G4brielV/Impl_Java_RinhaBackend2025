@@ -17,7 +17,6 @@ import java.time.Duration;
 @Configuration
 public class WebClientConfig {
 
-    // Valores inspirados nos repos de alta performance. Podem ser externalizados para o application.properties.
     int connectionTimeout = 2000;
     int readTimeout = 1500;
     int writeTimeout = 1500;

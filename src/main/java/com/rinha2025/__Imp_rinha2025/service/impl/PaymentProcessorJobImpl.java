@@ -1,7 +1,9 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
-import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rinha2025.__Imp_rinha2025.model.Component.ProcessorHealthState;
+import com.rinha2025.__Imp_rinha2025.model.dto.PaymentDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentProcessorJob;
 import com.rinha2025.__Imp_rinha2025.service.PaymentSenderService;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
@@ -27,59 +29,52 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
     private final PaymentSenderService paymentSenderService;
     private final ExecutorService paymentExecutor;
     private final ProcessorHealthState healthState;
-
+    private final ObjectMapper objectMapper;
 
     public PaymentProcessorJobImpl(PaymentService paymentService,
                                    PaymentSenderService paymentSenderService,
                                    ExecutorService paymentExecutor,
-                                   ProcessorHealthState healthState) {
+                                   ProcessorHealthState healthState,
+                                   ObjectMapper objectMapper) {
         this.paymentService = paymentService;
         this.paymentSenderService = paymentSenderService;
         this.paymentExecutor = paymentExecutor;
         this.healthState = healthState;
+        this.objectMapper = objectMapper;
     }
 
-    @Scheduled(fixedDelay = 15)
+    @Scheduled(fixedDelay = 5)
     @Override
     public void processPayment() {
         // Drena até 100 pagamentos da fila para uma lista local
-        List<String> paymentsToProcess = new ArrayList<>();
-        paymentService.drainQueue(paymentsToProcess, 100);
+        List<PaymentDTO> paymentsToProcess = new ArrayList<>();
+        paymentService.drainQueue(paymentsToProcess, 35);
 
         if (paymentsToProcess.isEmpty()) {
             return;
         }
+        // Fila para coletar pagamentos processados com sucesso de forma thread-safe
+        ConcurrentLinkedQueue<PaymentDTO> processedSuccessfully = new ConcurrentLinkedQueue<>();
 
-        // Sinaliza o início do processamento
-        paymentService.startProcessing();
-        try {
-            // Fila para coletar pagamentos processados com sucesso
-            ConcurrentLinkedQueue<PaymentEntity> processedSuccessfully = new ConcurrentLinkedQueue<>();
+        List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
+                .map(paymentDTO -> CompletableFuture.runAsync(() -> {
+                    PaymentDTO successfulPayment = processSinglePayment(paymentDTO);
+                    if (successfulPayment != null) {
+                        processedSuccessfully.add(successfulPayment);
+                    }
+                }, paymentExecutor))
+                .toList();
 
-            List<CompletableFuture<Void>> futures = paymentsToProcess.stream()
-                    .map(paymentJson -> CompletableFuture.runAsync(() -> {
-                        PaymentEntity successfulEntity = processSinglePayment(paymentJson);
-                        if (successfulEntity != null) {
-                            processedSuccessfully.add(successfulEntity);
-                        }
-                    }, paymentExecutor))
-                    .toList();
+        // Espera que todas as tarefas do lote terminem
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-            // Espera que todas as tarefas do lote terminem
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-            // Salva todos os pagamentos bem-sucedidos de uma vez
-            if (!processedSuccessfully.isEmpty()) {
-                paymentService.saveAll(new ArrayList<>(processedSuccessfully));
-            }
-        } finally {
-            // Garante que o fim do processamento seja sinalizado
-            paymentService.endProcessing();
+        // Salva todos os pagamentos bem-sucedidos de uma vez usando pipelining
+        if (!processedSuccessfully.isEmpty()) {
+            paymentService.saveAll(new ArrayList<>(processedSuccessfully));
         }
     }
 
-    private PaymentEntity processSinglePayment(String paymentJson) {
-        // 1. Pergunta qual o melhor processador no momento
+    private PaymentDTO processSinglePayment(PaymentDTO payment) {
         ProcessorHealthState.Processor preferred = healthState.getPreferredProcessor();
         String targetUrl;
         boolean isDefaultProcessor;
@@ -92,17 +87,27 @@ public class PaymentProcessorJobImpl implements PaymentProcessorJob {
             isDefaultProcessor = false;
         }
 
-        // 2. Tenta enviar para o processador escolhido
+        String paymentJson;
+
+        try {
+            // Converte para Json
+            paymentJson = objectMapper.writeValueAsString(payment);
+
+        } catch (JsonProcessingException e) {
+            // Se falhar, re-enfileiramos.
+            paymentService.enqueuePayment(payment);
+            return null;
+        }
+
         boolean success = paymentSenderService.send(paymentJson, targetUrl);
 
         if (success) {
-            PaymentEntity entity = PaymentEntity.fromJson(paymentJson);
-            entity.setDefault(isDefaultProcessor);
-            return entity;
+            // Se teve sucesso, retorna um NOVO DTO com o campo 'isDefault' preenchido.
+            return new PaymentDTO(payment.correlationId(), payment.amount(), payment.requestedAt(), isDefaultProcessor);
         }
 
-        // 3. Se falhar, mesmo no "saudável", apenas re-enfileira.
-        paymentService.enqueuePayment(paymentJson);
+        // Se falhar, re-enfileira o DTO original.
+        paymentService.enqueuePayment(payment);
         return null;
     }
 }

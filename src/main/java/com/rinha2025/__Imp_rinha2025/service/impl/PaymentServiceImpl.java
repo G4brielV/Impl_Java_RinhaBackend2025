@@ -1,141 +1,154 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
-import com.rinha2025.__Imp_rinha2025.entity.PaymentEntity;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rinha2025.__Imp_rinha2025.model.dto.PaymentDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentResultsDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
-import com.rinha2025.__Imp_rinha2025.model.projection.PaymentSummaryProjection;
-import com.rinha2025.__Imp_rinha2025.repository.PaymentRepository;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
-import org.postgresql.copy.CopyManager;
-import org.postgresql.core.BaseConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.sql.DataSource;
-import java.io.IOException;
-import java.io.StringReader;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 
 @Service
 public class PaymentServiceImpl implements PaymentService {
 
-    private final PaymentRepository paymentRepository;
-    private final DataSource dataSource;
-    private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Logger logger = LoggerFactory.getLogger(PaymentServiceImpl.class);
+    private final StringRedisTemplate redisTemplate;
+    private final BlockingQueue<PaymentDTO> queue = new LinkedBlockingQueue<>();
+    private final ObjectMapper objectMapper;
+    private static final Pattern AMOUNT_PATTERN = Pattern.compile("\"amount\":(\\d+\\.?\\d*)");
 
-    public PaymentServiceImpl(PaymentRepository paymentRepository, DataSource dataSource) {
-        this.paymentRepository = paymentRepository;
-        this.dataSource = dataSource;
+
+    public PaymentServiceImpl(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
     public void processPayment(PaymentRequestDTO requestDTO) {
-        // TODO: Convert the requestDTO to JSON and enqueue it for processing
-        String amountStr = String.format(Locale.US, "%.2f", requestDTO.amount());
-
-        String paymentJson = "{\"correlationId\":\"" + requestDTO.correlationId() +
-                "\",\"amount\":" + amountStr +
-                ",\"requestedAt\":\"" + Instant.now().toString() + "\"}";
-        enqueuePayment(paymentJson);
+        PaymentDTO paymentDTO = new PaymentDTO(requestDTO.correlationId(), requestDTO.amount(), Instant.now(), null);
+        enqueuePayment(paymentDTO);
     }
 
     @Override
-    public void enqueuePayment(String paymentJson) {
-        queue.offer(paymentJson);
+    public void enqueuePayment(PaymentDTO paymentDto) {
+        queue.offer(paymentDto);
     }
 
     @Override
-    public String dequeuePayment() {
+    public PaymentDTO dequeuePayment() {
         // poll() retorna null imediatamente se a fila estiver vazia,
         // ao invés de esperar como o take().
         return queue.poll();
     }
 
     @Override
-    public void save(PaymentEntity paymentEntity) {
-        paymentRepository.save(paymentEntity);
+    public void save(PaymentDTO payment) {
+        // O "score" será o timestamp em milissegundos
+        try {
+            double score = payment.requestedAt().toEpochMilli();
+            // O "valor" será o próprio pagamento serializado em JSON
+            String value = objectMapper.writeValueAsString(payment);
+            // Usamos dois Sorted Sets, um para cada processador
+            String key = Boolean.TRUE.equals(payment.isDefault()) ? "payments:default" : "payments:fallback";
+            redisTemplate.opsForZSet().add(key, value, score);
+        } catch (JsonProcessingException e){
+            logger.error("Falha ao serializar pagamento para o Redis: {}", payment.correlationId(), e);
+        }
+
     }
 
     @Override
-    public void saveAll(List<PaymentEntity> payments) {
+    public void saveAll(List<PaymentDTO> payments) {
         if (payments == null || payments.isEmpty()) {
             return;
         }
+        // executePipelined agrupa todos os comandos em uma única chamada de rede.
+        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+            for (PaymentDTO payment : payments) {
+                try {
+                    double score = payment.requestedAt().toEpochMilli();
+                    String value = objectMapper.writeValueAsString(payment);
+                    String key = Boolean.TRUE.equals(payment.isDefault()) ? "payments:default" : "payments:fallback";
 
-        // ... constrói a StringBuilder com dados em formato CSV
-        StringBuilder csvData = new StringBuilder();
-        for (PaymentEntity p : payments) {
-            // Formato: correlation_id, amount, created_at, is_default
-            csvData.append(p.getCorrelationId()).append("\t")
-                    .append(p.getAmount()).append("\t")
-                    .append(p.getCreatedAt().toString()).append("\t")
-                    .append(p.getDefault()).append("\n");
-        }
+                    // Converte a chave e o valor para bytes para o comando ZADD
+                    byte[] rawKey = redisTemplate.getStringSerializer().serialize(key);
+                    byte[] rawValue = redisTemplate.getStringSerializer().serialize(value);
 
-        try (Connection connection = dataSource.getConnection()) {
-            // Desembrulha a conexão do pool para obter a conexão PG real
-            BaseConnection baseConnection = connection.unwrap(BaseConnection.class);
-            CopyManager copyManager = new CopyManager(baseConnection);
-            StringReader reader = new StringReader(csvData.toString());
-            copyManager.copyIn("COPY payments (correlation_id, amount, created_at, is_default) FROM STDIN", reader);
-        } catch (SQLException | IOException e) {
-            // Lançar exceção ou logar. Em um cenário real, trataríamos isso melhor.
-            throw new RuntimeException("Erro ao usar COPY para inserir pagamentos", e);
-        }
+                    if (rawKey != null && rawValue != null) {
+                        connection.zSetCommands().zAdd(rawKey, score, rawValue);
+                    }
+                } catch (JsonProcessingException e) {
+                    // Loga o erro, mas não para o lote inteiro.
+                    logger.error("Falha ao serializar pagamento para o Redis: {}", payment.correlationId(), e);
+                }
+            }
+            // Retorna null porque não estamos esperando um resultado específico do pipeline.
+            return null;
+        });
     }
 
+
     @Override
-    public void drainQueue(List<String> collection, int maxElements) {
+    public void drainQueue(List<PaymentDTO> collection, int maxElements) {
         queue.drainTo(collection, maxElements);
     }
 
 
-    @Override
-    public void startProcessing() {
-        lock.readLock().lock();
-    }
-
-    @Override
-    public void endProcessing() {
-        lock.readLock().unlock();
-    }
-
-    @Override
-    public void awaitAllProcessors() {
-        // O métodoo de summary agora pede o lock de escrita
-        lock.writeLock().lock();
-        // A liberação do lock será feita no métodoo getPaymentSummary
-    }
-
 
     @Override
     public PaymentSummaryResponseDTO getPaymentSummary(Instant from, Instant to) {
-        awaitAllProcessors();
-        try {
-            List<PaymentSummaryProjection> summaryList = paymentRepository.findSummaryByDateRange(from, to);
+        long fromTimestamp = from.toEpochMilli();
+        long toTimestamp = to.toEpochMilli();
+        // Busca os pagamentos no intervalo de tempo para o 'default'
+        Set<String> defaultPaymentsJson = redisTemplate.opsForZSet().rangeByScore("payments:default", fromTimestamp, toTimestamp);
+        // Busca os pagamentos no intervalo de tempo para o 'fallback'
+        Set<String> fallbackPaymentsJson = redisTemplate.opsForZSet().rangeByScore("payments:fallback", fromTimestamp, toTimestamp);
 
-            PaymentResultsDTO defaultResults = new PaymentResultsDTO(0, 0.0);
-            PaymentResultsDTO fallbackResults = new PaymentResultsDTO(0, 0.0);
+        PaymentResultsDTO defaultResults = calculateSummary(defaultPaymentsJson);
+        PaymentResultsDTO fallbackResults = calculateSummary(fallbackPaymentsJson);
 
-            for (PaymentSummaryProjection summary : summaryList) {
-                if (Boolean.TRUE.equals(summary.getIsDefault())) {
-                    defaultResults = new PaymentResultsDTO(summary.getTotalRequests(), summary.getTotalAmount());
-                } else {
-                    fallbackResults = new PaymentResultsDTO(summary.getTotalRequests(), summary.getTotalAmount());
-                }
-            }
-            return new PaymentSummaryResponseDTO(defaultResults, fallbackResults);
-        } finally {
-            lock.writeLock().unlock(); // libera o lock
+        return new PaymentSummaryResponseDTO(defaultResults, fallbackResults);
+    }
+
+    private PaymentResultsDTO calculateSummary(Set<String> paymentsJson) {
+        if (paymentsJson == null || paymentsJson.isEmpty()) {
+            return new PaymentResultsDTO(0, 0.0);
         }
+
+        long totalRequests = paymentsJson.size();
+        double totalAmount = 0.0;
+
+        for (String json : paymentsJson) {
+            totalAmount += extractAmountFromJson(json);
+        }
+
+        return new PaymentResultsDTO(totalRequests, totalAmount);
+    }
+
+    private double extractAmountFromJson(String json) {
+        if (json == null) return 0.0;
+        Matcher matcher = AMOUNT_PATTERN.matcher(json);
+        if (matcher.find()) {
+            try {
+                return Double.parseDouble(matcher.group(1));
+            } catch (NumberFormatException e) {
+                return 0.0;
+            }
+        }
+        return 0.0;
     }
 }

@@ -26,6 +26,7 @@ public class PaymentSenderServiceImpl implements PaymentSenderService {
                     .toBodilessEntity()
                     .flatMap(response -> Mono.just(response.getStatusCode().value()))
                     .block();
+
             return statusCode != null && statusCode == 200;
         } catch (Exception e) {
             return false;
