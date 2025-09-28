@@ -268,6 +268,8 @@ export async function checkPaymentsConsistency() {
   const from = new Date(now - 1000 * 15).toISOString();
   const to = new Date(now - 2000).toISOString();
 
+  console.log(`[DEBUG] Checking summary from=${from} to=${to}`);
+
   const defaultAdminPaymentsSummaryPromise = getPPPaymentsSummary(
     "default",
     from,
