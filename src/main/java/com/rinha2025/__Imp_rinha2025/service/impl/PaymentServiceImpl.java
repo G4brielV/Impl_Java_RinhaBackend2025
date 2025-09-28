@@ -1,6 +1,5 @@
 package com.rinha2025.__Imp_rinha2025.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentDTO;
 import com.rinha2025.__Imp_rinha2025.model.dto.PaymentRequestDTO;
@@ -13,10 +12,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
@@ -26,17 +23,17 @@ public class PaymentServiceImpl implements PaymentService {
     private final Logger logger = LoggerFactory.getLogger(PaymentServiceImpl.class);
     private final StringRedisTemplate redisTemplate;
     private final BlockingQueue<PaymentDTO> queue = new LinkedBlockingQueue<>();
-    private final ObjectMapper objectMapper;
+    private double lastKnownAmount = 0.0;
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("\"amount\":(\\d+\\.?\\d*)");
 
 
     public PaymentServiceImpl(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
     }
 
     @Override
     public void processPayment(PaymentRequestDTO requestDTO) {
+        this.lastKnownAmount = requestDTO.amount();
         PaymentDTO paymentDTO = new PaymentDTO(requestDTO.correlationId(), requestDTO.amount(), Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS), null, 0);
         enqueuePayment(paymentDTO);
     }
@@ -58,12 +55,12 @@ public class PaymentServiceImpl implements PaymentService {
         // O "score" será o timestamp em milissegundos
         try {
             double score = payment.requestedAt().toEpochMilli();
-            // O "valor" será o próprio pagamento serializado em JSON
-            String value = objectMapper.writeValueAsString(payment);
+            // O "valor" será apenas o ID
+            String value = payment.correlationId();
             // Usamos dois Sorted Sets, um para cada processador
             String key = Boolean.TRUE.equals(payment.isDefault()) ? "payments:default" : "payments:fallback";
             redisTemplate.opsForZSet().add(key, value, score);
-        } catch (JsonProcessingException e){
+        } catch (Exception e){
             logger.error("Falha ao serializar pagamento para o Redis: {}", payment.correlationId(), e);
         }
     }
@@ -73,42 +70,13 @@ public class PaymentServiceImpl implements PaymentService {
         double fromTimestamp = from.toEpochMilli();
         double toTimestamp = to.toEpochMilli();
 
-        // Busca os pagamentos no intervalo de tempo para o 'default'
-        Set<String> defaultPaymentsJson = redisTemplate.opsForZSet().rangeByScore("payments:default", fromTimestamp, toTimestamp);
-        // Busca os pagamentos no intervalo de tempo para o 'fallback'
-        Set<String> fallbackPaymentsJson = redisTemplate.opsForZSet().rangeByScore("payments:fallback", fromTimestamp, toTimestamp);
+        // Zcount para contar os registros no intervalo de tempo dos scores
+        Long defaultCount = redisTemplate.opsForZSet().count("payments:default", fromTimestamp, toTimestamp);
+        Long fallbackCount = redisTemplate.opsForZSet().count("payments:fallback", fromTimestamp, toTimestamp);
 
-        PaymentResultsDTO defaultResults = calculateSummary(defaultPaymentsJson);
-        PaymentResultsDTO fallbackResults = calculateSummary(fallbackPaymentsJson);
+        PaymentResultsDTO defaultResults =new PaymentResultsDTO(defaultCount, defaultCount * this.lastKnownAmount);
+        PaymentResultsDTO fallbackResults =new PaymentResultsDTO(fallbackCount, fallbackCount * this.lastKnownAmount);
 
         return new PaymentSummaryResponseDTO(defaultResults, fallbackResults);
-    }
-
-    private PaymentResultsDTO calculateSummary(Set<String> paymentsJson) {
-        if (paymentsJson == null || paymentsJson.isEmpty()) {
-            return new PaymentResultsDTO(0, 0.0);
-        }
-
-        long totalRequests = paymentsJson.size();
-        double totalAmount = 0.0;
-
-        for (String json : paymentsJson) {
-            totalAmount += extractAmountFromJson(json);
-        }
-
-        return new PaymentResultsDTO(totalRequests, totalAmount);
-    }
-
-    private double extractAmountFromJson(String json) {
-        if (json == null) return 0.0;
-        Matcher matcher = AMOUNT_PATTERN.matcher(json);
-        if (matcher.find()) {
-            try {
-                return Double.parseDouble(matcher.group(1));
-            } catch (NumberFormatException e) {
-                return 0.0;
-            }
-        }
-        return 0.0;
     }
 }
