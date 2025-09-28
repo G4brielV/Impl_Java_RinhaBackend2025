@@ -9,12 +9,10 @@ import com.rinha2025.__Imp_rinha2025.model.dto.PaymentSummaryResponseDTO;
 import com.rinha2025.__Imp_rinha2025.service.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -39,7 +37,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public void processPayment(PaymentRequestDTO requestDTO) {
-        PaymentDTO paymentDTO = new PaymentDTO(requestDTO.correlationId(), requestDTO.amount(), Instant.now(), null);
+        PaymentDTO paymentDTO = new PaymentDTO(requestDTO.correlationId(), requestDTO.amount(), Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS), null, 0);
         enqueuePayment(paymentDTO);
     }
 
@@ -49,10 +47,10 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public PaymentDTO dequeuePayment() {
+    public PaymentDTO dequeuePayment() throws InterruptedException {
         // poll() retorna null imediatamente se a fila estiver vazia,
         // ao invés de esperar como o take().
-        return queue.poll();
+        return queue.take();
     }
 
     @Override
@@ -68,51 +66,13 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (JsonProcessingException e){
             logger.error("Falha ao serializar pagamento para o Redis: {}", payment.correlationId(), e);
         }
-
     }
-
-    @Override
-    public void saveAll(List<PaymentDTO> payments) {
-        if (payments == null || payments.isEmpty()) {
-            return;
-        }
-        // executePipelined agrupa todos os comandos em uma única chamada de rede.
-        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-            for (PaymentDTO payment : payments) {
-                try {
-                    double score = payment.requestedAt().toEpochMilli();
-                    String value = objectMapper.writeValueAsString(payment);
-                    String key = Boolean.TRUE.equals(payment.isDefault()) ? "payments:default" : "payments:fallback";
-
-                    // Converte a chave e o valor para bytes para o comando ZADD
-                    byte[] rawKey = redisTemplate.getStringSerializer().serialize(key);
-                    byte[] rawValue = redisTemplate.getStringSerializer().serialize(value);
-
-                    if (rawKey != null && rawValue != null) {
-                        connection.zSetCommands().zAdd(rawKey, score, rawValue);
-                    }
-                } catch (JsonProcessingException e) {
-                    // Loga o erro, mas não para o lote inteiro.
-                    logger.error("Falha ao serializar pagamento para o Redis: {}", payment.correlationId(), e);
-                }
-            }
-            // Retorna null porque não estamos esperando um resultado específico do pipeline.
-            return null;
-        });
-    }
-
-
-    @Override
-    public void drainQueue(List<PaymentDTO> collection, int maxElements) {
-        queue.drainTo(collection, maxElements);
-    }
-
-
 
     @Override
     public PaymentSummaryResponseDTO getPaymentSummary(Instant from, Instant to) {
-        long fromTimestamp = from.toEpochMilli();
-        long toTimestamp = to.toEpochMilli();
+        double fromTimestamp = from.toEpochMilli();
+        double toTimestamp = to.toEpochMilli();
+
         // Busca os pagamentos no intervalo de tempo para o 'default'
         Set<String> defaultPaymentsJson = redisTemplate.opsForZSet().rangeByScore("payments:default", fromTimestamp, toTimestamp);
         // Busca os pagamentos no intervalo de tempo para o 'fallback'

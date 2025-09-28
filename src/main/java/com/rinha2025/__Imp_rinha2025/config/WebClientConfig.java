@@ -17,8 +17,8 @@ import java.time.Duration;
 @Configuration
 public class WebClientConfig {
 
-    int connectionTimeout = 2000;
-    int readTimeout = 1500;
+    int connectionTimeout = 10000;
+    int readTimeout = 10000;
     int writeTimeout = 1500;
     int maxConnections = 1000;
     int maxIdleTime = 60000;

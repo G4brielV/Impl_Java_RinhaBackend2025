@@ -16,12 +16,8 @@ public interface PaymentService {
 
     void enqueuePayment(PaymentDTO paymentDTO);
 
-    PaymentDTO dequeuePayment();
+    PaymentDTO dequeuePayment() throws InterruptedException;
 
     void save(PaymentDTO paymentDTO);
-
-    void saveAll(List<PaymentDTO> payments);
-
-    void drainQueue(List<PaymentDTO> collection, int maxElements);
 
 }
