@@ -136,6 +136,27 @@ Inspirada em soluções de alta performance da comunidade, principalmente no [v�
 * **Objetivo:** Reduzir a latência e a sobrecarga da CPU na comunicação com os processadores de pagamento e no processamento assíncrono.
 * **Resultado:** A comunicação de rede se tornou mais eficiente com o HttpClient. A estratégia de converter o payload para JSON uma única vez, no momento da chegada, diminuiu o trabalho repetitivo da CPU no fluxo assíncrono, contribuindo para a estabilidade geral do sistema sob carga.
 
+## 📜 Pós Rinha: A Busca pela Perfeição
+###Versão 6: 🚦 A Saga do Semáforo e do COPY no PostgreSQL
+* **Tecnologias:** 🚦 Semáforos (ReentrantReadWriteLock), 🚀 COPY do PostgreSQL, 🐘 Tabelas UNLOGGED.
+* **Objetivo:** Eliminar as inconsistências persistentes, sincronizando a leitura do summary com a escrita assíncrona, e maximizar a performance de inserção em massa no PostgreSQL.
+* **Resultado:** Funcionou, mas ainda existiam gaps onde ocorriam inconsistências e o p(99) continuava sendo um problema.
+
+### Versão 7: 🌐 Modernizando a Rede com WebClient
+* **Tecnologias:** 🌐 Spring WebClient, ⚡ Reactor Netty.
+* **Objetivo:** Substituir o HttpClient pelo WebClient reativo, buscando maior eficiência e controle sobre o pool de conexões em alta concorrência.
+* **Resultado:** A API se tornou tão eficiente em aceitar requisições que criou um "congestionamento monstro", com a fila em memória crescendo mais rápido do que podia ser processada, trazendo as inconsistências de volta e uma latência também muito alta.
+
+### Versão 8: 💨 Migração para o Redis
+* **Tecnologias:** 💨 Redis, 🗃️ Sorted Sets, 🔐 Trava com SETNX.
+* **Objetivo:** Eliminar completamente o gargalo de I/O de disco, substituindo o PostgreSQL pelo Redis como banco de dados principal para persistência e coordenação.
+* **Resultado:** A performance de escrita e leitura melhorou absurdamente. A trava de eleição de líder com SETNX se mostrou muito mais simples e rápida que a trava transacional do PostgreSQL.
+
+### Versão 9: ✨ Worker Reativo e ZCOUNT (`branch: pos-rinha`)
+* **Tecnologias:** 👷 Worker reativo (@PostConstruct), 🧠 Retentativa com ScheduledExecutorService, 🔢 Redis ZCOUNT, ⏰ Timestamps Truncados.
+* **Objetivo:** Refinar a arquitetura para sua forma final, combinando os aprendizados de todas as etapas para máxima performance e consistência.
+* **Resultado:** Sucesso total. A troca do Job por um Worker reativo, a correção da precisão dos timestamps e o uso do ZCOUNT para os summaries zeraram as inconsistências e alcançaram a melhor performance possível.
+
 ---
 
 ## 🧩 Arquitetura
