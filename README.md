@@ -172,7 +172,7 @@ Inspirada em soluções de alta performance da comunidade, principalmente no [v�
 | nginx    | 0.3 | 40MB    |
 | api1     | 0.5 | 105MB   |
 | api2     | 0.5 | 105MB   |
-| postgres | 0.2 | 100MB   |
+| redis | 0.2 | 100MB   |
 
 ## 📁 Organização
 - src/: Código-fonte da aplicação Java
